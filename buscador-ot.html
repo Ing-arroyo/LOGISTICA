@@ -399,7 +399,14 @@ function parseCellRef(ref) {
   return { col, row: rowNum };
 }
 
-// Extrae una columna desde una celda de inicio hasta el final de filas con datos
+// Normaliza valor para comparación (números y texto)
+function normalizeVal(v) {
+  if (v === undefined || v === null || v === '') return '';
+  if (typeof v === 'number') return String(v).trim();
+  return String(v).trim().replace(/\./g, '').replace(/,/g, '');
+}
+
+// Extrae columna completa desde celda inicio, saltando vacíos intermedios
 function extractColumn(sheetMatrix, startRef) {
   const pos = parseCellRef(startRef);
   if (!pos) return [];
@@ -407,8 +414,9 @@ function extractColumn(sheetMatrix, startRef) {
   for (let r = pos.row; r < sheetMatrix.length; r++) {
     const row = sheetMatrix[r] || [];
     const val = row[pos.col];
-    if (val === undefined || val === null || val === '') break; // para al encontrar vacío
-    result.push({ val: String(val).trim(), rowIndex: r });
+    if (val === undefined || val === null || val === '') continue;
+    const norm = normalizeVal(val);
+    if (norm) result.push({ val: norm, rowIndex: r });
   }
   return result;
 }
@@ -557,7 +565,7 @@ document.getElementById('btn-run').addEventListener('click', () => {
     entries.forEach(({ val, rowIndex }) => {
       if (val) {
         const otVal = (otSheetData[rowIndex] || [])[otPosCol];
-        idx[val.toLowerCase()] = { ot: otVal !== undefined ? String(otVal).trim() : '', rowIndex };
+        idx[val.toLowerCase()] = { ot: otVal !== undefined ? normalizeVal(otVal) : '', rowIndex };
       }
     });
     indexes[type] = { idx, label: labelFor(type) };
@@ -572,7 +580,7 @@ document.getElementById('btn-run').addEventListener('click', () => {
   }
 
   resultsData = searchVals.map((item, i) => {
-    const valLow = item.val.toLowerCase();
+    const valLow = normalizeVal(item.val).toLowerCase();
     let foundOT = null, foundLabel = '';
     for (const [type, { idx, label }] of Object.entries(indexes)) {
       if (idx[valLow] !== undefined) {
