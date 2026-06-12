@@ -248,9 +248,13 @@
               <label>Guía Cooler — celda inicio</label>
               <input type="text" id="inp-guia-cool" placeholder="ej: E4" maxlength="6">
             </div>
-            <div class="col-field col-full">
+            <div class="col-field">
               <label>OT (resultado a retornar) — celda inicio</label>
               <input type="text" id="inp-ot" placeholder="ej: A4" maxlength="6">
+            </div>
+            <div class="col-field">
+              <label>Fecha de envío — celda inicio <span style="color:var(--muted);font-weight:400">(opcional)</span></label>
+              <input type="text" id="inp-fecha-envio" placeholder="ej: F4" maxlength="6">
             </div>
           </div>
         </div>
@@ -353,6 +357,7 @@
           <th>Guía</th>
           <th>Usado</th>
           <th>OT encontrada</th>
+          <th>Fecha de envío</th>
           <th>Columna maestro</th>
           <th>Estado</th>
         </tr>
@@ -516,7 +521,7 @@ document.getElementById('file-src').addEventListener('change', function () {
 });
 
 // Monitorear inputs de celda para habilitar botón
-['inp-hde-band','inp-hde-cool','inp-guia-band','inp-guia-cool','inp-ot','inp-src-hde','inp-src-guia'].forEach(id => {
+['inp-hde-band','inp-hde-cool','inp-guia-band','inp-guia-cool','inp-ot','inp-fecha-envio','inp-src-hde','inp-src-guia'].forEach(id => {
   document.getElementById(id).addEventListener('input', checkRunReady);
 });
 
@@ -542,6 +547,7 @@ document.getElementById('btn-run').addEventListener('click', () => {
     guia_cool: document.getElementById('inp-guia-cool').value.trim(),
   };
   const refOT  = document.getElementById('inp-ot').value.trim();
+  const refFechaEnvio = document.getElementById('inp-fecha-envio').value.trim();
   const refSrcHde  = document.getElementById('inp-src-hde').value.trim();
   const refSrcGuia = document.getElementById('inp-src-guia').value.trim();
 
@@ -571,6 +577,7 @@ document.getElementById('btn-run').addEventListener('click', () => {
   // Construir índice por columna activa
   // Extraemos columna OT también para obtener el valor por rowIndex
   const otPosCol = parseCellRef(refOT).col;
+  const fechaEnvioCol = refFechaEnvio ? parseCellRef(refFechaEnvio) : null;
 
   const indexes = {};
   activePills.forEach(type => {
@@ -613,7 +620,7 @@ document.getElementById('btn-run').addEventListener('click', () => {
         if (!indexes[type]) continue;
         const { idx, label } = indexes[type];
         if (idx[valLow] !== undefined) {
-          return { ot: idx[valLow].ot, label, usedVal: String(val) };
+          return { ot: idx[valLow].ot, rowIndex: idx[valLow].rowIndex, label, usedVal: String(val) };
         }
       }
     }
@@ -647,14 +654,35 @@ document.getElementById('btn-run').addEventListener('click', () => {
     }
 
     rowNum++;
+
+    // Obtener fecha de envío desde el maestro si se configuró la columna
+    let fechaEnvio = '';
+    if (result && fechaEnvioCol) {
+      const rawFecha = (otSheetData[result.rowIndex] || [])[fechaEnvioCol.col];
+      if (rawFecha !== undefined && rawFecha !== null && rawFecha !== '') {
+        // Si es número (fecha serial Excel), convertir
+        if (typeof rawFecha === 'number') {
+          const d = XLSX.SSF.parse_date_code(rawFecha);
+          if (d) {
+            fechaEnvio = `${String(d.d).padStart(2,'0')}/${String(d.m).padStart(2,'0')}/${d.y}`;
+          } else {
+            fechaEnvio = String(rawFecha);
+          }
+        } else {
+          fechaEnvio = String(rawFecha).trim();
+        }
+      }
+    }
+
     resultsData.push({
       idx: rowNum,
       valHde:  hdeNorm  || '—',
       valGuia: guiaNorm || '—',
       usedVal: result ? result.usedVal : '',
       usedType,
-      ot:    result ? result.ot    : '',
-      col:   result ? result.label : '',
+      ot:          result ? result.ot    : '',
+      fechaEnvio,
+      col:         result ? result.label : '',
       found: result !== null
     });
   }
@@ -664,7 +692,7 @@ document.getElementById('btn-run').addEventListener('click', () => {
     for (const type of hdeTypes) {
       if (!indexes[type]) continue;
       const { idx, label } = indexes[type];
-      if (idx[low] !== undefined) return { ot: idx[low].ot, label, usedVal: norm };
+      if (idx[low] !== undefined) return { ot: idx[low].ot, rowIndex: idx[low].rowIndex, label, usedVal: norm };
     }
     return null;
   }
@@ -673,7 +701,7 @@ document.getElementById('btn-run').addEventListener('click', () => {
     for (const type of guiaTypes) {
       if (!indexes[type]) continue;
       const { idx, label } = indexes[type];
-      if (idx[low] !== undefined) return { ot: idx[low].ot, label, usedVal: norm };
+      if (idx[low] !== undefined) return { ot: idx[low].ot, rowIndex: idx[low].rowIndex, label, usedVal: norm };
     }
     return null;
   }
@@ -714,6 +742,7 @@ function renderResults() {
       <td>${esc(r.valGuia)}</td>
       <td>${r.found ? `<span class="tag-col">${esc(r.usedType)}</span>` : ''}</td>
       <td>${r.found ? `<strong>${esc(r.ot)}</strong>` : '<span style="color:var(--muted)">—</span>'}</td>
+      <td>${r.found && r.fechaEnvio ? `<span style="color:var(--warn);font-size:0.8rem">📅 ${esc(r.fechaEnvio)}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
       <td>${r.found ? `<span class="tag-col" style="font-size:0.68rem">${esc(r.col)}</span>` : ''}</td>
       <td>${r.found ? '<span class="tag-found">✓</span>' : '<span class="tag-missing">No encontrado</span>'}</td>
     `;
@@ -736,6 +765,7 @@ document.getElementById('btn-export').addEventListener('click', () => {
     'Valor usado':    r.usedVal,
     'Tipo usado':     r.usedType,
     'OT encontrada':  r.ot,
+    'Fecha de envío': r.fechaEnvio || '',
     'Columna maestro': r.col,
     'Estado':         r.found ? 'Encontrado' : 'No encontrado',
   })));
