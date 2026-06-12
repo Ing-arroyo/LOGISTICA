@@ -152,7 +152,7 @@
   .chip-ok    { background: rgba(0,200,160,0.12); color: var(--accent);  border: 1px solid rgba(0,200,160,0.3); }
   .chip-miss  { background: rgba(224,82,82,0.12);  color: var(--danger); border: 1px solid rgba(224,82,82,0.3); }
   .chip-total { background: rgba(0,144,255,0.12);  color: var(--accent2);border: 1px solid rgba(0,144,255,0.3); }
-  .results-table-wrap { overflow-x: auto; border-radius: var(--radius); border: 1px solid var(--border); }
+  .results-table-wrap { overflow-x: auto; overflow-y: auto; max-height: 420px; border-radius: var(--radius); border: 1px solid var(--border); }
   table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
   thead th {
     background: #1c2330; padding: 12px 14px; text-align: left;
@@ -349,10 +349,11 @@
       <thead>
         <tr>
           <th>#</th>
-          <th>Valor buscado</th>
-          <th>Tipo</th>
+          <th>HDE</th>
+          <th>Guía</th>
+          <th>Usado</th>
           <th>OT encontrada</th>
-          <th>Encontrado en</th>
+          <th>Columna maestro</th>
           <th>Estado</th>
         </tr>
       </thead>
@@ -585,48 +586,102 @@ document.getElementById('btn-run').addEventListener('click', () => {
     indexes[type] = { idx, label: labelFor(type) };
   });
 
-  // Extraer valores a buscar — columna HDE y columna Guía por separado
-  const hdeVals  = refSrcHde  ? extractColumn(srcSheetData, refSrcHde)  : [];
-  const guiaVals = refSrcGuia ? extractColumn(srcSheetData, refSrcGuia) : [];
+  // Extraer filas desde ambas columnas alineadas por rowIndex
+  const posHde  = refSrcHde  ? parseCellRef(refSrcHde)  : null;
+  const posGuia = refSrcGuia ? parseCellRef(refSrcGuia) : null;
 
-  if (!hdeVals.length && !guiaVals.length) {
-    alertEl.innerHTML = `<div class="alert alert-err">⚠ No se encontraron valores en las celdas indicadas. Verifica las referencias.</div>`;
+  // Determinar rango de filas a recorrer
+  const startRow = Math.min(
+    posHde  ? posHde.row  : Infinity,
+    posGuia ? posGuia.row : Infinity
+  );
+  if (startRow === Infinity) {
+    alertEl.innerHTML = `<div class="alert alert-err">⚠ Debes indicar al menos una celda de inicio válida.</div>`;
     return;
   }
 
-  // Construir lista unificada con tipo de origen
-  const allSearchVals = [
-    ...hdeVals.map(v  => ({ ...v, srcType: 'hde'  })),
-    ...guiaVals.map(v => ({ ...v, srcType: 'guia' })),
-  ];
-
-  // Agrupar índices por familia (hde o guia) para buscar solo donde corresponde
   const hdeTypes  = ['hde_band',  'hde_cool'];
   const guiaTypes = ['guia_band', 'guia_cool'];
 
-  resultsData = allSearchVals.map((item, i) => {
-    const valLow = normalizeVal(item.val).toLowerCase();
-    // Buscar solo en los tipos que corresponden al origen
-    const typesToSearch = item.srcType === 'hde' ? hdeTypes : guiaTypes;
-    let foundOT = null, foundLabel = '';
-    for (const type of typesToSearch) {
-      if (!indexes[type]) continue;
-      const { idx, label } = indexes[type];
-      if (idx[valLow] !== undefined) {
-        foundOT    = idx[valLow].ot;
-        foundLabel = label;
-        break;
+  // Función buscar en índice por tipos
+  function searchInIndex(val) {
+    const valLow = normalizeVal(val).toLowerCase();
+    if (!valLow) return null;
+    // Intentar HDE primero, luego Guía
+    for (const types of [hdeTypes, guiaTypes]) {
+      for (const type of types) {
+        if (!indexes[type]) continue;
+        const { idx, label } = indexes[type];
+        if (idx[valLow] !== undefined) {
+          return { ot: idx[valLow].ot, label, usedVal: String(val) };
+        }
       }
     }
-    return {
-      idx: i + 1,
-      val: item.val,
-      srcCol: item.srcType === 'hde' ? 'HDE' : 'Guía',
-      ot: foundOT ?? '',
-      col: foundLabel,
-      found: foundOT !== null
-    };
-  });
+    return null;
+  }
+
+  resultsData = [];
+  let rowNum = 0;
+  for (let r = startRow; r < srcSheetData.length; r++) {
+    const srcRow = srcSheetData[r] || [];
+    const hdeRaw  = posHde  ? srcRow[posHde.col]  : undefined;
+    const guiaRaw = posGuia ? srcRow[posGuia.col] : undefined;
+
+    // Saltar fila si ambas celdas están vacías
+    if ((hdeRaw === undefined || hdeRaw === null || hdeRaw === '') &&
+        (guiaRaw === undefined || guiaRaw === null || guiaRaw === '')) continue;
+
+    // Buscar HDE primero; si no hay resultado, buscar Guía
+    let result = null;
+    let usedType = '';
+    const hdeNorm  = normalizeVal(hdeRaw);
+    const guiaNorm = normalizeVal(guiaRaw);
+
+    if (hdeNorm) {
+      const hdeResult = searchInHde(hdeNorm);
+      if (hdeResult) { result = hdeResult; usedType = 'HDE'; }
+    }
+    if (!result && guiaNorm) {
+      const guiaResult = searchInGuia(guiaNorm);
+      if (guiaResult) { result = guiaResult; usedType = 'Guía'; }
+    }
+
+    rowNum++;
+    resultsData.push({
+      idx: rowNum,
+      valHde:  hdeNorm  || '—',
+      valGuia: guiaNorm || '—',
+      usedVal: result ? result.usedVal : '',
+      usedType,
+      ot:    result ? result.ot    : '',
+      col:   result ? result.label : '',
+      found: result !== null
+    });
+  }
+
+  function searchInHde(norm) {
+    const low = norm.toLowerCase();
+    for (const type of hdeTypes) {
+      if (!indexes[type]) continue;
+      const { idx, label } = indexes[type];
+      if (idx[low] !== undefined) return { ot: idx[low].ot, label, usedVal: norm };
+    }
+    return null;
+  }
+  function searchInGuia(norm) {
+    const low = norm.toLowerCase();
+    for (const type of guiaTypes) {
+      if (!indexes[type]) continue;
+      const { idx, label } = indexes[type];
+      if (idx[low] !== undefined) return { ot: idx[low].ot, label, usedVal: norm };
+    }
+    return null;
+  }
+
+  if (!resultsData.length) {
+    alertEl.innerHTML = `<div class="alert alert-err">⚠ No se encontraron filas con datos en las celdas indicadas. Verifica las referencias.</div>`;
+    return;
+  }
 
   renderResults();
 });
@@ -642,7 +697,7 @@ function renderResults() {
   const missing = total - found;
 
   document.getElementById('results-section').style.display = 'block';
-  document.getElementById('results-stats').textContent = `${total.toLocaleString('es-CL')} registros procesados`;
+  document.getElementById('results-stats').textContent = `${total.toLocaleString('es-CL')} filas procesadas`;
   document.getElementById('stat-chips').innerHTML = `
     <div class="chip chip-total">📋 Total: ${total.toLocaleString('es-CL')}</div>
     <div class="chip chip-ok">✅ Encontrados: ${found.toLocaleString('es-CL')}</div>
@@ -655,11 +710,12 @@ function renderResults() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td style="color:var(--muted)">${r.idx}</td>
-      <td><strong>${esc(r.val)}</strong></td>
-      <td><span class="tag-col">${esc(r.srcCol)}</span></td>
+      <td>${esc(r.valHde)}</td>
+      <td>${esc(r.valGuia)}</td>
+      <td>${r.found ? `<span class="tag-col">${esc(r.usedType)}</span>` : ''}</td>
       <td>${r.found ? `<strong>${esc(r.ot)}</strong>` : '<span style="color:var(--muted)">—</span>'}</td>
-      <td>${r.found ? `<span class="tag-col">${esc(r.col)}</span>` : ''}</td>
-      <td>${r.found ? '<span class="tag-found">Encontrado</span>' : '<span class="tag-missing">No encontrado</span>'}</td>
+      <td>${r.found ? `<span class="tag-col" style="font-size:0.68rem">${esc(r.col)}</span>` : ''}</td>
+      <td>${r.found ? '<span class="tag-found">✓</span>' : '<span class="tag-missing">No encontrado</span>'}</td>
     `;
     tbody.appendChild(tr);
   });
@@ -675,10 +731,12 @@ document.getElementById('btn-export').addEventListener('click', () => {
   if (!resultsData.length) return;
   const ws = XLSX.utils.json_to_sheet(resultsData.map(r => ({
     '#':              r.idx,
-    'Valor buscado':  r.val,
-    'Tipo':           r.srcCol,
+    'HDE buscado':    r.valHde,
+    'Guía buscada':   r.valGuia,
+    'Valor usado':    r.usedVal,
+    'Tipo usado':     r.usedType,
     'OT encontrada':  r.ot,
-    'Encontrado en':  r.col,
+    'Columna maestro': r.col,
     'Estado':         r.found ? 'Encontrado' : 'No encontrado',
   })));
   const wb = XLSX.utils.book_new();
