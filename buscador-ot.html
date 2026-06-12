@@ -282,11 +282,15 @@
           </div>
         </div>
         <div class="cell-hint-box">
-          <div class="cell-hint-title">📌 Indica la celda donde comienza la lista de códigos a buscar</div>
+          <div class="cell-hint-title">📌 Indica la celda donde comienza cada columna en este archivo</div>
           <div class="col-grid" style="margin-top:0">
-            <div class="col-field col-full">
-              <label>Columna con los valores a buscar — celda inicio</label>
-              <input type="text" id="inp-src-val" placeholder="ej: A2" maxlength="6">
+            <div class="col-field">
+              <label>Columna HDE — celda inicio</label>
+              <input type="text" id="inp-src-hde" placeholder="ej: A2" maxlength="6">
+            </div>
+            <div class="col-field">
+              <label>Columna Guía — celda inicio</label>
+              <input type="text" id="inp-src-guia" placeholder="ej: B2" maxlength="6">
             </div>
           </div>
         </div>
@@ -346,8 +350,9 @@
         <tr>
           <th>#</th>
           <th>Valor buscado</th>
+          <th>Tipo</th>
           <th>OT encontrada</th>
-          <th>Columna origen</th>
+          <th>Encontrado en</th>
           <th>Estado</th>
         </tr>
       </thead>
@@ -462,7 +467,7 @@ function checkRunReady() {
   const hasOT  = otSheetData.length > 0;
   const hasSrc = srcSheetData.length > 0;
   const hasInpOT  = document.getElementById('inp-ot').value.trim() !== '';
-  const hasInpSrc = document.getElementById('inp-src-val').value.trim() !== '';
+  const hasInpSrc = document.getElementById('inp-src-hde').value.trim() !== '' || document.getElementById('inp-src-guia').value.trim() !== '';
   const hasPills  = activePills.size > 0;
   document.getElementById('btn-run').disabled = !(hasOT && hasSrc && hasInpOT && hasInpSrc && hasPills);
 }
@@ -510,7 +515,7 @@ document.getElementById('file-src').addEventListener('change', function () {
 });
 
 // Monitorear inputs de celda para habilitar botón
-['inp-hde-band','inp-hde-cool','inp-guia-band','inp-guia-cool','inp-ot','inp-src-val'].forEach(id => {
+['inp-hde-band','inp-hde-cool','inp-guia-band','inp-guia-cool','inp-ot','inp-src-hde','inp-src-guia'].forEach(id => {
   document.getElementById(id).addEventListener('input', checkRunReady);
 });
 
@@ -536,7 +541,8 @@ document.getElementById('btn-run').addEventListener('click', () => {
     guia_cool: document.getElementById('inp-guia-cool').value.trim(),
   };
   const refOT  = document.getElementById('inp-ot').value.trim();
-  const refSrc = document.getElementById('inp-src-val').value.trim();
+  const refSrcHde  = document.getElementById('inp-src-hde').value.trim();
+  const refSrcGuia = document.getElementById('inp-src-guia').value.trim();
 
   // Validar referencias activas
   const invalidPills = [...activePills].filter(p => !refMap[p] || !parseCellRef(refMap[p]));
@@ -548,8 +554,16 @@ document.getElementById('btn-run').addEventListener('click', () => {
     alertEl.innerHTML = `<div class="alert alert-err">⚠ La referencia de celda para OT no es válida.</div>`;
     return;
   }
-  if (!parseCellRef(refSrc)) {
-    alertEl.innerHTML = `<div class="alert alert-err">⚠ La referencia de celda para los valores a buscar no es válida.</div>`;
+  if (!refSrcHde && !refSrcGuia) {
+    alertEl.innerHTML = `<div class="alert alert-err">⚠ Debes indicar al menos una celda de inicio en el archivo de búsqueda (HDE o Guía).</div>`;
+    return;
+  }
+  if (refSrcHde && !parseCellRef(refSrcHde)) {
+    alertEl.innerHTML = `<div class="alert alert-err">⚠ La referencia de celda para la columna HDE no es válida.</div>`;
+    return;
+  }
+  if (refSrcGuia && !parseCellRef(refSrcGuia)) {
+    alertEl.innerHTML = `<div class="alert alert-err">⚠ La referencia de celda para la columna Guía no es válida.</div>`;
     return;
   }
 
@@ -571,25 +585,47 @@ document.getElementById('btn-run').addEventListener('click', () => {
     indexes[type] = { idx, label: labelFor(type) };
   });
 
-  // Extraer valores a buscar
-  const searchVals = extractColumn(srcSheetData, refSrc);
+  // Extraer valores a buscar — columna HDE y columna Guía por separado
+  const hdeVals  = refSrcHde  ? extractColumn(srcSheetData, refSrcHde)  : [];
+  const guiaVals = refSrcGuia ? extractColumn(srcSheetData, refSrcGuia) : [];
 
-  if (!searchVals.length) {
-    alertEl.innerHTML = `<div class="alert alert-err">⚠ No se encontraron valores en la celda indicada del archivo de búsqueda. Verifica la referencia.</div>`;
+  if (!hdeVals.length && !guiaVals.length) {
+    alertEl.innerHTML = `<div class="alert alert-err">⚠ No se encontraron valores en las celdas indicadas. Verifica las referencias.</div>`;
     return;
   }
 
-  resultsData = searchVals.map((item, i) => {
+  // Construir lista unificada con tipo de origen
+  const allSearchVals = [
+    ...hdeVals.map(v  => ({ ...v, srcType: 'hde'  })),
+    ...guiaVals.map(v => ({ ...v, srcType: 'guia' })),
+  ];
+
+  // Agrupar índices por familia (hde o guia) para buscar solo donde corresponde
+  const hdeTypes  = ['hde_band',  'hde_cool'];
+  const guiaTypes = ['guia_band', 'guia_cool'];
+
+  resultsData = allSearchVals.map((item, i) => {
     const valLow = normalizeVal(item.val).toLowerCase();
+    // Buscar solo en los tipos que corresponden al origen
+    const typesToSearch = item.srcType === 'hde' ? hdeTypes : guiaTypes;
     let foundOT = null, foundLabel = '';
-    for (const [type, { idx, label }] of Object.entries(indexes)) {
+    for (const type of typesToSearch) {
+      if (!indexes[type]) continue;
+      const { idx, label } = indexes[type];
       if (idx[valLow] !== undefined) {
         foundOT    = idx[valLow].ot;
         foundLabel = label;
         break;
       }
     }
-    return { idx: i + 1, val: item.val, ot: foundOT ?? '', col: foundLabel, found: foundOT !== null };
+    return {
+      idx: i + 1,
+      val: item.val,
+      srcCol: item.srcType === 'hde' ? 'HDE' : 'Guía',
+      ot: foundOT ?? '',
+      col: foundLabel,
+      found: foundOT !== null
+    };
   });
 
   renderResults();
@@ -620,6 +656,7 @@ function renderResults() {
     tr.innerHTML = `
       <td style="color:var(--muted)">${r.idx}</td>
       <td><strong>${esc(r.val)}</strong></td>
+      <td><span class="tag-col">${esc(r.srcCol)}</span></td>
       <td>${r.found ? `<strong>${esc(r.ot)}</strong>` : '<span style="color:var(--muted)">—</span>'}</td>
       <td>${r.found ? `<span class="tag-col">${esc(r.col)}</span>` : ''}</td>
       <td>${r.found ? '<span class="tag-found">Encontrado</span>' : '<span class="tag-missing">No encontrado</span>'}</td>
@@ -639,8 +676,9 @@ document.getElementById('btn-export').addEventListener('click', () => {
   const ws = XLSX.utils.json_to_sheet(resultsData.map(r => ({
     '#':              r.idx,
     'Valor buscado':  r.val,
+    'Tipo':           r.srcCol,
     'OT encontrada':  r.ot,
-    'Columna origen': r.col,
+    'Encontrado en':  r.col,
     'Estado':         r.found ? 'Encontrado' : 'No encontrado',
   })));
   const wb = XLSX.utils.book_new();
