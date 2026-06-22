@@ -585,9 +585,26 @@ document.getElementById('btn-run').addEventListener('click', () => {
     const entries = extractColumn(otSheetData, ref);
     const idx = {};
     entries.forEach(({ val, rowIndex }) => {
-      if (val) {
-        const otVal = (otSheetData[rowIndex] || [])[otPosCol];
-        idx[val.toLowerCase()] = { ot: otVal !== undefined ? normalizeVal(otVal) : '', rowIndex };
+      if (!val) return;
+      const otVal = (otSheetData[rowIndex] || [])[otPosCol];
+      const payload = { ot: otVal !== undefined ? normalizeVal(otVal) : '', rowIndex };
+
+      // 1) Clave completa — prioridad alta (exact: true)
+      const fullKey = val.toLowerCase();
+      if (!idx[fullKey] || !idx[fullKey].exact) {
+        idx[fullKey] = { ...payload, exact: true, matchedSegment: val };
+      }
+
+      // 2) Segmentos separados por guion (espacios ignorados)
+      //    Solo se registran si la clave no existe ya como exacta
+      const segments = val.split('-').map(s => s.trim()).filter(Boolean);
+      if (segments.length > 1) {
+        segments.forEach(seg => {
+          const segKey = seg.toLowerCase();
+          if (!idx[segKey]) {
+            idx[segKey] = { ...payload, exact: false, matchedSegment: seg };
+          }
+        });
       }
     });
     indexes[type] = { idx, label: labelFor(type) };
@@ -680,31 +697,37 @@ document.getElementById('btn-run').addEventListener('click', () => {
       valGuia: guiaNorm || '—',
       usedVal: result ? result.usedVal : '',
       usedType,
-      ot:          result ? result.ot    : '',
+      ot:             result ? result.ot    : '',
       fechaEnvio,
-      col:         result ? result.label : '',
+      matchedSegment: result ? result.matchedSegment : null,
+      col:            result ? result.label : '',
       found: result !== null
     });
   }
 
-  function searchInHde(norm) {
+  // Busca primero coincidencia exacta; si no, busca por segmento (split por guion)
+  function searchInTypes(norm, types) {
     const low = norm.toLowerCase();
-    for (const type of hdeTypes) {
+    // Paso 1: coincidencia exacta en cualquier tipo activo
+    for (const type of types) {
       if (!indexes[type]) continue;
       const { idx, label } = indexes[type];
-      if (idx[low] !== undefined) return { ot: idx[low].ot, rowIndex: idx[low].rowIndex, label, usedVal: norm };
+      if (idx[low] !== undefined && idx[low].exact) {
+        return { ot: idx[low].ot, rowIndex: idx[low].rowIndex, label, usedVal: norm, matchedSegment: null };
+      }
+    }
+    // Paso 2: búsqueda por segmento (el valor buscado puede estar dentro de una celda compuesta)
+    for (const type of types) {
+      if (!indexes[type]) continue;
+      const { idx, label } = indexes[type];
+      if (idx[low] !== undefined) {
+        return { ot: idx[low].ot, rowIndex: idx[low].rowIndex, label, usedVal: norm, matchedSegment: idx[low].matchedSegment };
+      }
     }
     return null;
   }
-  function searchInGuia(norm) {
-    const low = norm.toLowerCase();
-    for (const type of guiaTypes) {
-      if (!indexes[type]) continue;
-      const { idx, label } = indexes[type];
-      if (idx[low] !== undefined) return { ot: idx[low].ot, rowIndex: idx[low].rowIndex, label, usedVal: norm };
-    }
-    return null;
-  }
+  function searchInHde(norm)  { return searchInTypes(norm, hdeTypes);  }
+  function searchInGuia(norm) { return searchInTypes(norm, guiaTypes); }
 
   if (!resultsData.length) {
     alertEl.innerHTML = `<div class="alert alert-err">⚠ No se encontraron filas con datos en las celdas indicadas. Verifica las referencias.</div>`;
@@ -740,7 +763,7 @@ function renderResults() {
       <td style="color:var(--muted)">${r.idx}</td>
       <td>${esc(r.valHde)}</td>
       <td>${esc(r.valGuia)}</td>
-      <td>${r.found ? `<span class="tag-col">${esc(r.usedType)}</span>` : ''}</td>
+      <td>${r.found ? `<span class="tag-col">${esc(r.usedType)}</span>${r.matchedSegment ? ` <span title="Coincidió con segmento: ${esc(r.matchedSegment)}" style="font-size:0.68rem;color:var(--warn);cursor:help">✂ segmento</span>` : ''}` : ''}</td>
       <td>${r.found ? `<strong>${esc(r.ot)}</strong>` : '<span style="color:var(--muted)">—</span>'}</td>
       <td>${r.found && r.fechaEnvio ? `<span style="color:var(--warn);font-size:0.8rem">📅 ${esc(r.fechaEnvio)}</span>` : '<span style="color:var(--muted)">—</span>'}</td>
       <td>${r.found ? `<span class="tag-col" style="font-size:0.68rem">${esc(r.col)}</span>` : ''}</td>
@@ -766,6 +789,7 @@ document.getElementById('btn-export').addEventListener('click', () => {
     'Tipo usado':     r.usedType,
     'OT encontrada':  r.ot,
     'Fecha de envío': r.fechaEnvio || '',
+    'Coincidencia':   r.matchedSegment ? 'Por segmento' : (r.found ? 'Exacta' : ''),
     'Columna maestro': r.col,
     'Estado':         r.found ? 'Encontrado' : 'No encontrado',
   })));
