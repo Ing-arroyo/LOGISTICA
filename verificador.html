@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Verificador de Despacho</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600;700&display=swap');
+:root{
+  --bg:#0c0e16;--surface:#131620;--card:#191d2e;--card2:#1e2438;
+  --border:#252c45;--border2:#2e3755;
+  --accent:#3b82f6;--cyan:#06b6d4;--ok:#22c55e;--warn:#f59e0b;--danger:#ef4444;
+  --text:#e2e8f0;--muted:#3d4966;--muted2:#6b7a9e;
+  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{font-family:var(--sans);background:var(--bg);color:var(--text);display:flex;flex-direction:column}
+
+/* HEADER */
+header{
+  background:var(--surface);border-bottom:1px solid var(--border);
+  padding:11px 20px;display:flex;align-items:center;gap:14px;flex-shrink:0;
+}
+.logo{
+  width:32px;height:32px;border-radius:7px;flex-shrink:0;
+  background:linear-gradient(135deg,var(--accent),var(--cyan));
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-weight:600;font-size:12px;color:#fff;
+}
+.ht h1{font-size:14px;font-weight:600}
+.ht p{font-size:11px;color:var(--muted2);font-family:var(--mono)}
+.hpills{margin-left:auto;display:flex;gap:8px}
+.hpill{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:5px 11px;text-align:center;min-width:58px}
+.hpv{font-family:var(--mono);font-size:15px;font-weight:600;line-height:1}
+.hpl{font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:.08em;margin-top:2px}
+.c-cyan{color:var(--cyan)}.c-ok{color:var(--ok)}.c-warn{color:var(--warn)}.c-danger{color:var(--danger)}
+
+/* APP */
+.app{display:flex;flex:1;overflow:hidden}
+
+/* SIDEBAR */
+.sidebar{
+  width:230px;flex-shrink:0;background:var(--surface);
+  border-right:1px solid var(--border);display:flex;flex-direction:column;
+}
+.sb-head{
+  padding:12px 14px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.sb-head-lbl{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--muted2)}
+.dest-list{flex:1;overflow-y:auto;padding:6px}
+.dest-list::-webkit-scrollbar{width:3px}
+.dest-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+.dest-item{
+  border-radius:7px;padding:9px 11px;cursor:pointer;
+  border:1px solid transparent;margin-bottom:3px;transition:all .12s;position:relative;
+}
+.dest-item:hover{background:var(--card);border-color:var(--border)}
+.dest-item.active{background:var(--card2);border-color:var(--accent)}
+.di-top{display:flex;align-items:center;gap:7px;margin-bottom:5px}
+.di-ico{font-size:15px;flex-shrink:0}
+.di-name{font-size:13px;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.di-del{
+  position:absolute;top:7px;right:8px;background:none;border:none;
+  color:var(--muted);cursor:pointer;font-size:13px;opacity:0;transition:opacity .12s;padding:1px 3px;
+}
+.dest-item:hover .di-del{opacity:1}
+.di-del:hover{color:var(--danger)}
+.di-bar-wrap{height:3px;background:var(--muted);border-radius:2px;overflow:hidden;margin-bottom:4px}
+.di-bar-fill{height:100%;border-radius:2px;transition:width .3s}
+.di-bar-fill.full{background:var(--ok)}.di-bar-fill.part{background:var(--warn)}.di-bar-fill.none{background:var(--muted)}
+.di-meta{display:flex;justify-content:space-between;align-items:center}
+.di-count{font-family:var(--mono);font-size:10px;color:var(--muted2)}
+.di-pct{font-family:var(--mono);font-size:10px;font-weight:600}
+.di-pct.full{color:var(--ok)}.di-pct.part{color:var(--warn)}.di-pct.none{color:var(--muted2)}
+.di-miss-badge{
+  background:rgba(239,68,68,.2);color:var(--danger);
+  font-family:var(--mono);font-size:9px;font-weight:600;
+  padding:1px 5px;border-radius:4px;
+}
+
+.sb-add{padding:10px 14px;border-top:1px solid var(--border)}
+.sb-add-input{
+  width:100%;background:var(--card);border:1px solid var(--border);
+  border-radius:6px;color:var(--text);font-family:var(--sans);font-size:13px;
+  padding:7px 10px;outline:none;transition:border-color .15s;
+}
+.sb-add-input:focus{border-color:var(--cyan)}
+.sb-add-input::placeholder{color:var(--muted2)}
+
+/* MAIN */
+.main{flex:1;overflow-y:auto;padding:18px}
+.main::-webkit-scrollbar{width:4px}
+.main::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+/* CARDS */
+.card{background:var(--card);border:1px solid var(--border);border-radius:9px;padding:16px;margin-bottom:12px}
+.card.hl-danger{border-color:rgba(239,68,68,.4);background:rgba(239,68,68,.03)}
+.ctitle{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.1em;color:var(--muted2);margin-bottom:12px;display:flex;align-items:center;gap:7px}
+
+/* SCAN INPUT */
+.scan-wrap{display:flex;gap:8px;margin-bottom:10px}
+.scan-input{
+  flex:1;background:var(--bg);border:2px solid var(--border);border-radius:7px;
+  color:var(--text);font-family:var(--mono);font-size:17px;
+  padding:10px 13px;outline:none;transition:border-color .15s;letter-spacing:.03em;
+}
+.scan-input:focus{border-color:var(--cyan)}
+.scan-input::placeholder{color:var(--muted2);font-size:13px}
+
+/* TEXTAREA */
+.ta{
+  width:100%;min-height:160px;background:var(--bg);border:2px dashed var(--border);
+  border-radius:7px;color:var(--text);font-family:var(--mono);font-size:11px;
+  line-height:1.65;padding:12px;resize:vertical;outline:none;transition:border-color .15s;
+}
+.ta:focus{border-color:var(--accent);border-style:solid}
+.ta::placeholder{color:var(--muted2);font-style:italic}
+
+/* BUTTONS */
+.btn{
+  background:var(--accent);border:none;border-radius:7px;color:#fff;
+  font-family:var(--sans);font-size:13px;font-weight:600;
+  padding:0 16px;cursor:pointer;transition:opacity .12s;white-space:nowrap;
+}
+.btn:hover{opacity:.82}
+.btn.sec{background:var(--border);color:var(--text)}
+.btn.ok{background:var(--ok);color:#0c0e16}
+.btn.danger{background:var(--danger)}
+.btn.h44{height:44px}.btn.h32{height:32px;font-size:12px;padding:0 12px}
+.btn-row{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px;align-items:center}
+
+/* FEEDBACK */
+.sfb{height:24px;display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:12px;margin-bottom:8px;opacity:0;transition:opacity .18s}
+.sfb.show{opacity:1}
+.sfb.ok{color:var(--ok)}.sfb.dup{color:var(--warn)}.sfb.err{color:var(--danger)}.sfb.part{color:var(--warn)}
+.fb-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;animation:pop .35s ease}
+@keyframes pop{0%{transform:scale(2);opacity:.3}100%{transform:scale(1);opacity:1}}
+
+/* STATS */
+.stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px}
+.stat-box{background:var(--card2);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;text-align:center}
+.stat-val{font-family:var(--mono);font-size:22px;font-weight:600;line-height:1;margin-bottom:2px}
+.stat-lbl{font-size:9px;color:var(--muted2);text-transform:uppercase;letter-spacing:.08em}
+
+/* PROGRESS */
+.prog-wrap{margin-bottom:14px}
+.prog-lbl{display:flex;justify-content:space-between;font-size:11px;color:var(--muted2);margin-bottom:4px;font-family:var(--mono)}
+.prog-track{height:4px;background:var(--muted);border-radius:2px;overflow:hidden}
+.prog-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--cyan));border-radius:2px;transition:width .35s}
+
+/* CHIPS */
+.chip-grid{display:flex;flex-wrap:wrap;gap:6px;max-height:180px;overflow-y:auto;padding-right:3px}
+.chip-grid::-webkit-scrollbar{width:3px}
+.chip-grid::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.chip{
+  background:var(--bg);border:1px solid var(--border);border-radius:5px;
+  padding:4px 9px;font-family:var(--mono);font-size:11px;
+  display:flex;align-items:center;gap:5px;transition:border-color .12s;
+}
+.chip:hover{border-color:var(--cyan)}
+/* full=all items scanned, part=some items, none=not started */
+.chip.c-full{border-color:rgba(34,197,94,.4);color:var(--ok)}
+.chip.c-part{border-color:rgba(245,158,11,.5);color:var(--warn)}
+.chip.c-none{border-color:var(--border);color:var(--muted2)}
+.chip.c-extra{border-color:rgba(239,68,68,.4);color:var(--danger)}
+.chip-badge{
+  font-size:10px;background:var(--border);border-radius:3px;
+  padding:0 4px;line-height:16px;
+}
+.chip-full .chip-badge{background:rgba(34,197,94,.2)}
+.chip-part .chip-badge{background:rgba(245,158,11,.2)}
+.chip-x{color:var(--muted2);cursor:pointer;font-size:12px;line-height:1;margin-left:2px}
+.chip-x:hover{color:var(--danger)}
+
+/* VROWS */
+.vrow{
+  display:flex;align-items:center;gap:9px;padding:6px 9px;
+  border-radius:5px;font-family:var(--mono);font-size:11px;
+  background:var(--bg);border:1px solid transparent;margin-bottom:3px;
+}
+.vrow.ok{border-color:rgba(34,197,94,.2);color:var(--ok)}
+.vrow.miss{border-color:rgba(239,68,68,.2);color:var(--danger)}
+.vrow.part{border-color:rgba(245,158,11,.25);color:var(--warn)}
+.vrow.extra{border-color:rgba(239,68,68,.15);color:rgba(239,68,68,.7)}
+.vrow-ico{flex-shrink:0;width:14px;font-size:12px}
+.vrow-num{flex:1}
+.vrow-sub{font-size:10px;opacity:.6;margin-left:4px}
+.vrow-qty{font-family:var(--mono);font-size:10px;opacity:.7;white-space:nowrap}
+
+.vlist{display:flex;flex-direction:column;max-height:220px;overflow-y:auto;padding-right:3px}
+.vlist::-webkit-scrollbar{width:3px}
+.vlist::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+/* SEARCH */
+.search{
+  background:var(--bg);border:1px solid var(--border);border-radius:5px;
+  color:var(--text);font-family:var(--mono);font-size:12px;
+  padding:6px 10px;width:100%;outline:none;margin-bottom:7px;transition:border-color .15s;
+}
+.search:focus{border-color:var(--cyan)}
+.search::placeholder{color:var(--muted2)}
+
+/* HINT */
+.hint{font-size:10px;color:var(--muted2);font-family:var(--mono);margin-top:6px;line-height:1.5}
+.parse-st{font-size:11px;font-family:var(--mono);margin-top:7px;color:var(--muted2)}
+
+/* 2 COL */
+.v2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+@media(max-width:700px){.v2{grid-template-columns:1fr}}
+
+/* DOT */
+.dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;display:inline-block}
+.dot.ok{background:var(--ok)}.dot.danger{background:var(--danger)}.dot.warn{background:var(--warn)}.dot.cyan{background:var(--cyan)}
+
+/* EMPTY */
+.empty{text-align:center;padding:32px 16px;color:var(--muted2);font-size:13px}
+.ei{font-size:28px;margin-bottom:7px;opacity:.35}
+
+/* TABS */
+.dtabs{display:flex;gap:2px;margin-bottom:14px;background:var(--surface);border-radius:7px;padding:3px}
+.dtab{background:none;border:none;color:var(--muted2);font-family:var(--sans);font-size:12px;font-weight:500;padding:6px 12px;cursor:pointer;border-radius:5px;transition:all .12s}
+.dtab:hover{color:var(--text)}
+.dtab.active{background:var(--card2);color:var(--cyan)}
+
+/* WELCOME */
+.welcome{max-width:420px;margin:60px auto;text-align:center}
+.welcome-icon{font-size:48px;margin-bottom:16px;opacity:.5}
+.welcome h2{font-size:18px;font-weight:600;margin-bottom:8px}
+.welcome p{font-size:13px;color:var(--muted2);line-height:1.7}
+
+/* TOAST */
+#toast{
+  position:fixed;bottom:18px;right:18px;background:var(--card2);
+  border:1px solid var(--border2);border-radius:7px;padding:10px 15px;
+  font-size:12px;font-family:var(--mono);z-index:999;
+  transform:translateY(60px);opacity:0;transition:all .2s;
+}
+#toast.show{transform:translateY(0);opacity:1}
+
+/* LOG */
+.log-item{
+  display:flex;align-items:center;gap:8px;padding:5px 8px;
+  border-radius:5px;font-family:var(--mono);font-size:11px;margin-bottom:2px;
+  background:var(--bg);
+}
+.log-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.log-dot.ok{background:var(--ok)}.log-dot.warn{background:var(--warn)}.log-dot.err{background:var(--danger)}
+.log-num{flex:1;color:var(--text)}
+.log-lbl{font-size:10px;color:var(--muted2)}
+.log-time{font-size:10px;color:var(--muted);margin-left:auto}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">VG</div>
+  <div class="ht">
+    <h1>Verificador de Despacho</h1>
+    <p>Control de carga por destino · SB Logistics</p>
+  </div>
+  <div class="hpills">
+    <div class="hpill"><div class="hpv c-cyan" id="h-viajes">0</div><div class="hpl">Viajes</div></div>
+    <div class="hpill"><div class="hpv c-cyan" id="h-total">0</div><div class="hpl">Bultos</div></div>
+    <div class="hpill"><div class="hpv c-ok"   id="h-ok">0</div><div class="hpl">Verificados</div></div>
+    <div class="hpill"><div class="hpv c-danger" id="h-miss">0</div><div class="hpl">Faltantes</div></div>
+  </div>
+</header>
+
+<div class="app">
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sb-head">
+      <span class="sb-head-lbl">Viajes activos</span>
+      <span id="sb-count" style="font-family:var(--mono);font-size:12px;color:var(--cyan)">0</span>
+    </div>
+    <div class="dest-list" id="dest-list">
+      <div class="empty" style="padding:20px 8px">
+        <div class="ei" style="font-size:22px">🚚</div>
+        <p style="font-size:11px">Crea el primer viaje con el campo de abajo.</p>
+      </div>
+    </div>
+    <div class="sb-add">
+      <input id="new-dest" class="sb-add-input" placeholder="+ Nuevo destino (Enter)..."
+        onkeydown="if(event.key==='Enter') createViaje()" />
+    </div>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main" id="main">
+    <div class="welcome">
+      <div class="welcome-icon">🚚</div>
+      <h2>Crea un viaje para comenzar</h2>
+      <p>Escribe el nombre del destino en el panel izquierdo y presiona Enter.<br>Luego pega la data del sistema y empieza a escanear.</p>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════════
+//  DATA MODEL
+//
+//  viaje.sistema  = Map<codigo, {qty, raw}>
+//                   qty = cuántas veces aparece en la data (bultos/items)
+//
+//  viaje.scanned  = Map<codigo, count>
+//                   count = cuántas veces fue escaneado ese código
+//
+//  Un código se considera COMPLETO cuando scanned[codigo] >= sistema[codigo].qty
+//  Un código se considera PARCIAL  cuando 0 < scanned[codigo] < sistema[codigo].qty
+//  Un código se considera FALTANTE cuando scanned[codigo] === 0 (o no existe)
+// ═══════════════════════════════════════════════════════════════════════
+
+const SK = 'vd4_state';
+
+// state.viajes = { [id]: { id, name, created, sistema:[[cod,{qty,raw}],...], scanned:[[cod,count],...] } }
+let state = { viajes:{}, order:[] };
+
+(function(){
+  try{
+    const s=localStorage.getItem(SK);
+    if(s){
+      const raw=JSON.parse(s);
+      // Rehydrate Maps
+      state.order=raw.order||[];
+      state.viajes={};
+      Object.entries(raw.viajes||{}).forEach(([id,v])=>{
+        state.viajes[id]={
+          ...v,
+          sistema: new Map(v.sistema||[]),
+          scanned: new Map(v.scanned||[])
+        };
+      });
+    }
+  }catch(e){}
+  renderSidebar();
+  updateHeader();
+  if(state.order.length===1) openViaje(state.order[0]);
+})();
+
+function save(){
+  const out={order:state.order, viajes:{}};
+  Object.entries(state.viajes).forEach(([id,v])=>{
+    out.viajes[id]={...v, sistema:[...v.sistema.entries()], scanned:[...v.scanned.entries()]};
+  });
+  localStorage.setItem(SK, JSON.stringify(out));
+}
+
+// ── HELPERS ────────────────────────────────────────────────────────────
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,6); }
+
+function normalize(raw){
+  if(!raw) return null;
+  const c=raw.trim().replace(/\D/g,'');
+  return c.length>=6 ? c : null;
+}
+
+// Resolve input to a known codigo in sistema, or return as-is
+function resolveCode(v, raw){
+  const cleaned=raw.replace(/\D/g,'');
+  // Exact match
+  if(v.sistema.has(cleaned)) return cleaned;
+  // Suffix match (last N digits)
+  for(const [cod] of v.sistema){
+    if(cod.endsWith(cleaned)) return cod;
+  }
+  // Not in sistema — return cleaned anyway (will be marked extra)
+  return cleaned;
+}
+
+// Ambiguity check: does this suffix match more than one codigo?
+function ambiguousMatch(v, suffix){
+  if(v.sistema.has(suffix)) return []; // exact, no ambiguity
+  const matches=[...v.sistema.keys()].filter(c=>c.endsWith(suffix));
+  return matches.length>1 ? matches : [];
+}
+
+function stats(v){
+  // totalBultos = sum of all qty in sistema (total physical items expected)
+  // totalGuias  = number of unique codes in sistema
+  // verifiedBultos = sum of min(scanned, qty) for each codigo
+  // missingBultos  = sum of max(0, qty - scanned) for each codigo
+  let totalBultos=0, totalGuias=0, verifiedBultos=0, missingBultos=0, partialGuias=0;
+  v.sistema.forEach((entry,cod)=>{
+    totalGuias++;
+    totalBultos+=entry.qty;
+    const sc=v.scanned.get(cod)||0;
+    const done=Math.min(sc,entry.qty);
+    verifiedBultos+=done;
+    const miss=Math.max(0,entry.qty-sc);
+    if(miss>0) missingBultos+=miss;
+    if(sc>0 && sc<entry.qty) partialGuias++;
+  });
+  // Extra scans (scanned codes not in sistema)
+  let extraScans=0;
+  v.scanned.forEach((cnt,cod)=>{ if(!v.sistema.has(cod)) extraScans+=cnt; });
+  const totalScanned=[...v.scanned.values()].reduce((a,b)=>a+b,0);
+  const pct=totalBultos>0?Math.round(verifiedBultos/totalBultos*100):0;
+  return{totalBultos,totalGuias,verifiedBultos,missingBultos,partialGuias,extraScans,totalScanned,pct};
+}
+
+function pcls(pct){ return pct===100?'full':pct>0?'part':'none'; }
+
+function toast(msg){
+  const el=document.getElementById('toast');
+  el.textContent=msg;el.classList.add('show');
+  clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),2500);
+}
+
+// ── CREATE / DELETE ────────────────────────────────────────────────────
+function createViaje(){
+  const inp=document.getElementById('new-dest');
+  const name=inp.value.trim(); if(!name) return;
+  inp.value='';
+  const id=uid();
+  state.viajes[id]={id, name:name.toUpperCase(), created:Date.now(), sistema:new Map(), scanned:new Map(), log:[]};
+  state.order.push(id);
+  save(); renderSidebar(); updateHeader(); openViaje(id);
+  toast(`Viaje "${name.toUpperCase()}" creado`);
+}
+
+function deleteViaje(id){
+  const v=state.viajes[id];
+  if(!confirm(`¿Eliminar viaje a "${v.name}"?`)) return;
+  delete state.viajes[id];
+  state.order=state.order.filter(x=>x!==id);
+  save(); renderSidebar(); updateHeader();
+  const main=document.getElementById('main');
+  if(main.dataset.open===id){
+    main.dataset.open='';
+    main.innerHTML=`<div class="welcome"><div class="welcome-icon">🚚</div><h2>Selecciona un viaje</h2><p>O crea uno nuevo desde el panel izquierdo.</p></div>`;
+  }
+}
+
+// ── SIDEBAR ────────────────────────────────────────────────────────────
+function renderSidebar(){
+  const el=document.getElementById('dest-list');
+  document.getElementById('sb-count').textContent=state.order.length;
+  if(!state.order.length){
+    el.innerHTML=`<div class="empty" style="padding:20px 8px"><div class="ei" style="font-size:22px">🚚</div><p style="font-size:11px">Crea el primer viaje con el campo de abajo.</p></div>`;
+    return;
+  }
+  const openId=(document.getElementById('main').dataset||{}).open;
+  el.innerHTML=state.order.map(id=>{
+    const v=state.viajes[id]; if(!v) return '';
+    const s=stats(v);
+    const cls=pcls(s.pct);
+    const isActive=openId===id;
+    return `<div class="dest-item${isActive?' active':''}" onclick="openViaje('${id}')">
+      <button class="di-del" onclick="event.stopPropagation();deleteViaje('${id}')">×</button>
+      <div class="di-top"><span class="di-ico">🚚</span><span class="di-name">${v.name}</span></div>
+      <div class="di-bar-wrap"><div class="di-bar-fill ${cls}" style="width:${s.pct}%"></div></div>
+      <div class="di-meta">
+        <span class="di-count">${s.totalScanned}/${s.totalBultos} bultos</span>
+        ${s.missingBultos>0?`<span class="di-miss-badge">${s.missingBultos} faltan</span>`:''}
+        <span class="di-pct ${cls}">${s.totalBultos>0?s.pct+'%':'sin data'}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── HEADER ─────────────────────────────────────────────────────────────
+function updateHeader(){
+  let total=0,ok=0,miss=0;
+  state.order.forEach(id=>{
+    const v=state.viajes[id]; if(!v) return;
+    const s=stats(v);
+    total+=s.totalBultos; ok+=s.verifiedBultos; miss+=s.missingBultos;
+  });
+  document.getElementById('h-viajes').textContent=state.order.length;
+  document.getElementById('h-total').textContent=total;
+  document.getElementById('h-ok').textContent=ok;
+  document.getElementById('h-miss').textContent=miss;
+}
+
+// ── OPEN VIAJE ─────────────────────────────────────────────────────────
+let activeTab={};
+function openViaje(id){
+  document.getElementById('main').dataset.open=id;
+  activeTab[id]=activeTab[id]||'scan';
+  renderMain(id); renderSidebar();
+}
+function switchDTab(id,tab){ activeTab[id]=tab; renderMain(id); }
+
+function renderMain(id){
+  const v=state.viajes[id];
+  const s=stats(v);
+  const tab=activeTab[id]||'scan';
+  const main=document.getElementById('main');
+  main.innerHTML=`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <span style="font-size:20px">🚚</span>
+      <div>
+        <div style="font-size:16px;font-weight:700">${v.name}</div>
+        <div style="font-size:11px;color:var(--muted2);font-family:var(--mono)">
+          ${s.totalGuias} guías · ${s.totalBultos} bultos · ${s.pct}% verificado
+        </div>
+      </div>
+    </div>
+    <div class="dtabs">
+      <button class="dtab${tab==='scan'?' active':''}" onclick="switchDTab('${id}','scan')">📷 Escanear</button>
+      <button class="dtab${tab==='data'?' active':''}" onclick="switchDTab('${id}','data')">📋 Data sistema</button>
+      <button class="dtab${tab==='verify'?' active':''}" onclick="switchDTab('${id}','verify')">
+        ✅ Verificación${s.missingBultos>0?` <span style="color:var(--danger)">(${s.missingBultos})</span>`:''}
+      </button>
+      <button class="dtab${tab==='log'?' active':''}" onclick="switchDTab('${id}','log')">🗒 Log</button>
+    </div>
+    <div id="dtab-content">
+      ${tab==='scan'   ? renderScanTab(id,v,s)   : ''}
+      ${tab==='data'   ? renderDataTab(id,v,s)   : ''}
+      ${tab==='verify' ? renderVerifyTab(id,v,s) : ''}
+      ${tab==='log'    ? renderLogTab(id,v)       : ''}
+    </div>
+  `;
+  if(tab==='scan') setTimeout(()=>{ const inp=document.getElementById('si-'+id); if(inp) inp.focus(); },40);
+}
+
+// ── TAB: SCAN ──────────────────────────────────────────────────────────
+function renderScanTab(id,v,s){
+  return `
+    <div class="card">
+      <div class="ctitle">Ingresar guía</div>
+      <div class="scan-wrap">
+        <input id="si-${id}" class="scan-input" type="text"
+          placeholder="Escanea o escribe el número..."
+          autocomplete="off"
+          onkeydown="if(event.key==='Enter') addScan('${id}')" />
+        <button class="btn h44" onclick="addScan('${id}')">Agregar</button>
+      </div>
+      <div class="sfb" id="sfb-${id}"><div class="fb-dot"></div><span id="sfbt-${id}"></span></div>
+      <div class="hint">
+        Acepta número completo o últimos 6 dígitos.<br>
+        Si un código tiene múltiples bultos, escanéalo tantas veces como corresponda.
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="stat-row">
+        <div class="stat-box"><div class="stat-val c-cyan">${s.totalBultos}</div><div class="stat-lbl">Bultos sistema</div></div>
+        <div class="stat-box"><div class="stat-val c-cyan">${s.totalScanned}</div><div class="stat-lbl">Escaneados</div></div>
+        <div class="stat-box"><div class="stat-val c-ok">${s.verifiedBultos}</div><div class="stat-lbl">Verificados</div></div>
+        <div class="stat-box"><div class="stat-val c-danger">${s.missingBultos}</div><div class="stat-lbl">Faltantes</div></div>
+      </div>
+      <div class="prog-wrap">
+        <div class="prog-lbl"><span>Progreso del viaje</span><span>${s.pct}%</span></div>
+        <div class="prog-track"><div class="prog-fill" style="width:${s.pct}%"></div></div>
+      </div>
+      <div class="ctitle" style="margin-bottom:8px">Estado por guía</div>
+      <div class="chip-grid">${renderChips(v)}</div>
+      <div class="btn-row">
+        <button class="btn sec h32" onclick="exportScan('${id}')">⬇ Exportar</button>
+        <button class="btn danger h32" onclick="clearScan('${id}')" style="margin-left:auto">🗑 Limpiar escaneos</button>
+      </div>
+    </div>
+
+    ${s.missingBultos>0||s.partialGuias>0 ? `
+    <div class="card hl-danger">
+      <div class="ctitle"><span class="dot danger"></span>
+        Pendientes — ${s.missingBultos} bulto(s) sin verificar
+      </div>
+      <input class="search" placeholder="Buscar en faltantes..." oninput="filterMiss('${id}',this.value,'miss-${id}')">
+      <div class="vlist" id="miss-${id}">${renderMissingList(v,'')}</div>
+    </div>` : `<div class="card"><div class="ctitle"><span class="dot ok"></span> ¡Todos los bultos verificados! 🎉</div></div>`}
+
+    ${s.extraScans>0 ? `
+    <div class="card">
+      <div class="ctitle"><span class="dot warn"></span> Escaneados no encontrados en sistema (${s.extraScans})</div>
+      <div class="vlist">${renderExtraList(v)}</div>
+    </div>` : ''}
+  `;
+}
+
+function renderChips(v){
+  if(v.sistema.size===0 && v.scanned.size===0)
+    return `<div class="empty" style="padding:16px"><div class="ei" style="font-size:20px">📄</div><p>Sin data cargada</p></div>`;
+
+  let html='';
+  // Sistema codes
+  v.sistema.forEach((entry,cod)=>{
+    const sc=v.scanned.get(cod)||0;
+    const full=sc>=entry.qty;
+    const part=sc>0&&!full;
+    const cls=full?'c-full':part?'c-part':'c-none';
+    const badge=entry.qty>1?`<span class="chip-badge">${sc}/${entry.qty}</span>`:'';
+    html+=`<div class="chip ${cls}" title="${cod} — ${sc}/${entry.qty} bultos">${cod.slice(-6)}${badge}</div>`;
+  });
+  // Extra scanned (not in sistema)
+  v.scanned.forEach((cnt,cod)=>{
+    if(!v.sistema.has(cod))
+      html+=`<div class="chip c-extra" title="No está en sistema: ${cod}">${cod.slice(-6)} <span class="chip-badge">?${cnt}</span></div>`;
+  });
+  return html || `<div class="empty" style="padding:16px"><div class="ei" style="font-size:20px">📄</div><p>Sin escaneos aún</p></div>`;
+}
+
+function renderMissingList(v, filter){
+  const fl=filter.toLowerCase();
+  let rows=[];
+  v.sistema.forEach((entry,cod)=>{
+    const sc=v.scanned.get(cod)||0;
+    const miss=Math.max(0,entry.qty-sc);
+    if(miss===0) return;
+    if(fl && !cod.includes(fl)) return;
+    const part=sc>0;
+    rows.push(`<div class="vrow ${part?'part':'miss'}">
+      <span class="vrow-ico">${part?'◑':'✗'}</span>
+      <span class="vrow-num">${cod}</span>
+      <span class="vrow-qty">${part?`${sc}/${entry.qty} — faltan ${miss}`:`${miss} bulto(s)`}</span>
+    </div>`);
+  });
+  return rows.length ? rows.join('') : `<div style="color:var(--muted2);font-size:11px;padding:6px">Sin resultados</div>`;
+}
+
+function renderExtraList(v){
+  let rows=[];
+  v.scanned.forEach((cnt,cod)=>{
+    if(!v.sistema.has(cod))
+      rows.push(`<div class="vrow extra"><span class="vrow-ico">?</span><span class="vrow-num">${cod}</span><span class="vrow-qty">×${cnt}</span></div>`);
+  });
+  return rows.join('');
+}
+
+function filterMiss(id,val,listId){
+  const el=document.getElementById(listId);
+  if(el) el.innerHTML=renderMissingList(state.viajes[id],val);
+}
+
+// ── TAB: DATA ──────────────────────────────────────────────────────────
+function renderDataTab(id,v,s){
+  const hasSis=v.sistema.size>0;
+  return `
+    <div class="card">
+      <div class="ctitle">Data del sistema — ${v.name}</div>
+      <textarea class="ta" id="ta-${id}"
+        placeholder="Pega aquí la data del sistema para este viaje.&#10;Los códigos de 9-13 dígitos se extraen automáticamente.&#10;Si un código aparece 5 veces, se registrarán 5 bultos."
+        oninput="parseData('${id}')"></textarea>
+      <div class="parse-st" id="ps-${id}">
+        ${hasSis?`✓ ${s.totalGuias} guías · ${s.totalBultos} bultos cargados.`:`Pega la data y se procesará automáticamente.`}
+      </div>
+    </div>
+    ${hasSis?`
+    <div class="card">
+      <div class="ctitle">${s.totalGuias} guías · ${s.totalBultos} bultos en total</div>
+      <div class="vlist">
+        ${[...v.sistema.entries()].map(([cod,entry],i)=>`
+          <div class="vrow" style="color:var(--text);border-color:var(--border)">
+            <span class="vrow-ico" style="color:var(--muted2);font-size:10px">${i+1}</span>
+            <span class="vrow-num">${cod}</span>
+            ${entry.qty>1?`<span class="vrow-qty" style="color:var(--warn)">×${entry.qty} bultos</span>`:''}
+          </div>`).join('')}
+      </div>
+      <div class="btn-row">
+        <button class="btn danger h32" onclick="clearData('${id}')">🗑 Limpiar data sistema</button>
+      </div>
+    </div>`:``}
+  `;
+}
+
+// ── TAB: VERIFY ────────────────────────────────────────────────────────
+function renderVerifyTab(id,v,s){
+  if(v.sistema.size===0&&v.scanned.size===0)
+    return `<div class="card"><div class="empty"><div class="ei">📋</div><p>Carga data del sistema y escanea guías para ver la verificación.</p></div></div>`;
+
+  const missingRows=[], okRows=[], partialRows=[];
+  v.sistema.forEach((entry,cod)=>{
+    const sc=v.scanned.get(cod)||0;
+    if(sc>=entry.qty) okRows.push({cod,entry,sc});
+    else if(sc>0) partialRows.push({cod,entry,sc});
+    else missingRows.push({cod,entry,sc});
+  });
+  const extraRows=[];
+  v.scanned.forEach((cnt,cod)=>{ if(!v.sistema.has(cod)) extraRows.push({cod,cnt}); });
+
+  return `
+    <div class="stat-row">
+      <div class="stat-box"><div class="stat-val c-cyan">${s.totalBultos}</div><div class="stat-lbl">Bultos sistema</div></div>
+      <div class="stat-box"><div class="stat-val c-cyan">${s.totalScanned}</div><div class="stat-lbl">Escaneados</div></div>
+      <div class="stat-box"><div class="stat-val c-ok">${s.verifiedBultos}</div><div class="stat-lbl">Verificados</div></div>
+      <div class="stat-box"><div class="stat-val c-danger">${s.missingBultos}</div><div class="stat-lbl">Faltantes</div></div>
+    </div>
+    <div class="prog-wrap">
+      <div class="prog-lbl"><span>Completitud del viaje</span><span>${s.pct}%</span></div>
+      <div class="prog-track"><div class="prog-fill" style="width:${s.pct}%"></div></div>
+    </div>
+
+    ${missingRows.length||partialRows.length ? `
+    <div class="card hl-danger" style="margin-bottom:12px">
+      <div class="ctitle"><span class="dot danger"></span> Pendientes (${missingRows.length+partialRows.length} guías · ${s.missingBultos} bultos)</div>
+      <input class="search" placeholder="Buscar..." oninput="filterMiss('${id}',this.value,'vmiss-${id}')">
+      <div class="vlist" id="vmiss-${id}">
+        ${partialRows.map(({cod,entry,sc})=>`<div class="vrow part"><span class="vrow-ico">◑</span><span class="vrow-num">${cod}</span><span class="vrow-qty">${sc}/${entry.qty} — faltan ${entry.qty-sc}</span></div>`).join('')}
+        ${missingRows.map(({cod,entry})=>`<div class="vrow miss"><span class="vrow-ico">✗</span><span class="vrow-num">${cod}</span><span class="vrow-qty">${entry.qty} bulto(s)</span></div>`).join('')}
+      </div>
+    </div>`:``}
+
+    <div class="v2">
+      <div class="card">
+        <div class="ctitle"><span class="dot ok"></span> Verificadas completas (${okRows.length})</div>
+        <div class="vlist">${okRows.length
+          ? okRows.map(({cod,entry})=>`<div class="vrow ok"><span class="vrow-ico">✓</span><span class="vrow-num">${cod}</span>${entry.qty>1?`<span class="vrow-qty">×${entry.qty}</span>`:''}</div>`).join('')
+          : `<div class="empty" style="padding:16px"><p>Ninguna completa aún</p></div>`}
+        </div>
+      </div>
+      <div class="card">
+        <div class="ctitle"><span class="dot warn"></span> Sin match en sistema (${extraRows.length})</div>
+        <div class="vlist">${extraRows.length
+          ? extraRows.map(({cod,cnt})=>`<div class="vrow extra"><span class="vrow-ico">?</span><span class="vrow-num">${cod}</span><span class="vrow-qty">×${cnt}</span></div>`).join('')
+          : `<div class="empty" style="padding:16px"><p>Todo cuadra ✓</p></div>`}
+        </div>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn ok h32" onclick="exportReport('${id}')">⬇ Exportar reporte</button>
+    </div>
+  `;
+}
+
+// ── TAB: LOG ───────────────────────────────────────────────────────────
+function renderLogTab(id,v){
+  const log=v.log||[];
+  return `
+    <div class="card">
+      <div class="ctitle">Historial de escaneos — ${log.length} entradas</div>
+      ${log.length===0
+        ? `<div class="empty"><div class="ei" style="font-size:20px">🗒</div><p>Sin escaneos registrados aún</p></div>`
+        : `<div class="vlist" style="max-height:400px">
+            ${[...log].reverse().map(e=>`
+              <div class="log-item">
+                <div class="log-dot ${e.type}"></div>
+                <span class="log-num">${e.cod}</span>
+                <span class="log-lbl">${e.label}</span>
+                <span class="log-time">${e.time}</span>
+              </div>`).join('')}
+          </div>`}
+      <div class="btn-row">
+        <button class="btn danger h32" onclick="clearLog('${id}')">🗑 Limpiar log</button>
+      </div>
+    </div>
+  `;
+}
+
+// ── SCAN ACTIONS ───────────────────────────────────────────────────────
+function addScan(id){
+  const v=state.viajes[id]; if(!v) return;
+  const inp=document.getElementById('si-'+id);
+  const raw=inp.value.trim(); inp.value=''; inp.focus();
+  const cleaned=normalize(raw);
+  if(!cleaned){ showFb(id,'err','Número inválido — solo dígitos'); return; }
+
+  if(v.sistema.size===0){ showFb(id,'err','Carga la data del sistema primero'); return; }
+
+  // Ambiguity check for suffix searches
+  if(!v.sistema.has(cleaned)){
+    const amb=ambiguousMatch(v,cleaned);
+    if(amb.length>1){
+      showFb(id,'err',`⚠ ${amb.length} guías terminan en …${cleaned} — ingresa el código completo`);
+      return;
+    }
+  }
+
+  const cod=resolveCode(v,cleaned);
+  const time=new Date().toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const inSis=v.sistema.has(cod);
+
+  if(inSis){
+    const entry=v.sistema.get(cod);
+    const prev=v.scanned.get(cod)||0;
+    if(prev>=entry.qty){
+      // Already fully scanned
+      showFb(id,'dup',`⚠ ${cod.slice(-6)} ya completo (${entry.qty}/${entry.qty} bultos)`);
+      addLog(v,'warn',cod,`Duplicado (ya completo)`,time);
+    } else {
+      const newCount=prev+1;
+      v.scanned.set(cod,newCount);
+      const remaining=entry.qty-newCount;
+      if(remaining>0){
+        showFb(id,'part',`◑ ${cod.slice(-6)} — ${newCount}/${entry.qty} bultos (faltan ${remaining})`);
+        addLog(v,'warn',cod,`Parcial ${newCount}/${entry.qty}`,time);
+      } else {
+        showFb(id,'ok',`✓ ${cod.slice(-6)} completo — ${entry.qty} bulto(s) verificado(s)`);
+        addLog(v,'ok',cod,`Completo ×${entry.qty}`,time);
+      }
+    }
+  } else {
+    // Not in sistema
+    const prev=v.scanned.get(cod)||0;
+    v.scanned.set(cod,prev+1);
+    showFb(id,'err',`✗ ${cod.slice(-6)} no encontrado en sistema`);
+    addLog(v,'err',cod,'No en sistema',time);
+  }
+
+  save();
+  renderMain(id);
+  renderSidebar();
+  updateHeader();
+}
+
+function addLog(v,type,cod,label,time){
+  if(!v.log) v.log=[];
+  v.log.push({type,cod,label,time});
+  if(v.log.length>500) v.log=v.log.slice(-500);
+}
+
+function showFb(id,type,msg){
+  const el=document.getElementById('sfb-'+id);
+  const tx=document.getElementById('sfbt-'+id);
+  if(!el||!tx) return;
+  el.className='sfb show '+type; tx.textContent=msg;
+  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove('show'),2800);
+}
+
+function clearScan(id){
+  if(!confirm('¿Limpiar todos los escaneos?')) return;
+  state.viajes[id].scanned=new Map();
+  save(); renderMain(id); renderSidebar(); updateHeader(); toast('Escaneos limpiados');
+}
+
+function clearLog(id){
+  state.viajes[id].log=[];
+  save(); renderMain(id); toast('Log limpiado');
+}
+
+// ── DATA SISTEMA ───────────────────────────────────────────────────────
+function parseData(id){
+  const v=state.viajes[id]; if(!v) return;
+  const raw=document.getElementById('ta-'+id).value;
+  const newMap=new Map();
+  raw.split('\n').forEach(line=>{
+    const nums=line.match(/\b(\d{9,13})\b/g);
+    if(nums) nums.forEach(m=>{
+      const entry=newMap.get(m)||{qty:0,raw:line.trim()};
+      entry.qty++;
+      newMap.set(m,entry);
+    });
+  });
+  v.sistema=newMap;
+  save();
+  const s=stats(v);
+  const st=document.getElementById('ps-'+id);
+  if(st){
+    if(newMap.size){
+      const multi=[...newMap.values()].filter(e=>e.qty>1).length;
+      st.textContent=`✓ ${s.totalGuias} guías · ${s.totalBultos} bultos${multi>0?` · ${multi} guías con múltiples bultos`:''}`;
+      st.style.color='var(--ok)';
+    } else if(raw.trim()){
+      st.textContent='⚠ No se detectaron códigos. Verifica el formato.';
+      st.style.color='var(--warn)';
+    } else {
+      st.textContent='Pega la data y se procesará automáticamente.';
+      st.style.color='';
+    }
+  }
+  renderSidebar(); updateHeader();
+}
+
+function clearData(id){
+  if(!confirm('¿Limpiar la data del sistema para este viaje?')) return;
+  state.viajes[id].sistema=new Map();
+  save(); renderMain(id); renderSidebar(); updateHeader(); toast('Data limpiada');
+}
+
+// ── EXPORTS ────────────────────────────────────────────────────────────
+function exportScan(id){
+  const v=state.viajes[id];
+  if(v.scanned.size===0){ toast('Nada que exportar'); return; }
+  let txt='';
+  v.scanned.forEach((cnt,cod)=>{ for(let i=0;i<cnt;i++) txt+=cod+'\n'; });
+  download(`escaneo_${v.name}.txt`,txt.trim());
+  toast('Lista exportada');
+}
+
+function exportReport(id){
+  const v=state.viajes[id];
+  const s=stats(v);
+  const now=new Date().toLocaleString('es-CL');
+  let txt=`REPORTE DE DESPACHO — ${v.name}\n${now}\n${'='.repeat(50)}\n\n`;
+  txt+=`Guías en sistema: ${s.totalGuias}\nBultos en sistema: ${s.totalBultos}\nBultos escaneados: ${s.totalScanned}\nBultos verificados: ${s.verifiedBultos}\nBultos faltantes: ${s.missingBultos}\n\n`;
+
+  const missing=[],partial=[],ok=[],extra=[];
+  v.sistema.forEach((entry,cod)=>{
+    const sc=v.scanned.get(cod)||0;
+    if(sc>=entry.qty) ok.push({cod,entry,sc});
+    else if(sc>0) partial.push({cod,entry,sc});
+    else missing.push({cod,entry});
+  });
+  v.scanned.forEach((cnt,cod)=>{ if(!v.sistema.has(cod)) extra.push({cod,cnt}); });
+
+  if(missing.length){ txt+=`FALTANTES COMPLETOS (${missing.length} guías)\n${'─'.repeat(30)}\n`; missing.forEach((r,i)=>txt+=`  ${i+1}. ${r.cod}  ×${r.entry.qty} bultos\n`); txt+='\n'; }
+  if(partial.length){ txt+=`PARCIALES (${partial.length} guías)\n${'─'.repeat(30)}\n`; partial.forEach((r,i)=>txt+=`  ${i+1}. ${r.cod}  ${r.sc}/${r.entry.qty} — faltan ${r.entry.qty-r.sc}\n`); txt+='\n'; }
+  if(extra.length){  txt+=`SIN MATCH EN SISTEMA (${extra.length})\n${'─'.repeat(30)}\n`; extra.forEach((r,i)=>txt+=`  ${i+1}. ${r.cod}  ×${r.cnt}\n`); txt+='\n'; }
+  txt+=`VERIFICADOS COMPLETOS (${ok.length} guías)\n${'─'.repeat(30)}\n`; ok.forEach((r,i)=>txt+=`  ${i+1}. ${r.cod}${r.entry.qty>1?'  ×'+r.entry.qty:''}\n`);
+
+  download(`reporte_${v.name}.txt`,txt);
+  toast('Reporte exportado');
+}
+
+function download(filename,text){
+  const a=document.createElement('a');
+  a.href='data:text/plain;charset=utf-8,'+encodeURIComponent(text);
+  a.download=filename; a.click();
+}
+</script>
+</body>
+</html>
