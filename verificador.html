@@ -63,11 +63,12 @@ header{
 .di-ico{font-size:15px;flex-shrink:0}
 .di-name{font-size:13px;font-weight:600;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .di-del{
-  position:absolute;top:7px;right:8px;background:none;border:none;
-  color:var(--muted);cursor:pointer;font-size:13px;opacity:0;transition:opacity .12s;padding:1px 3px;
+  position:absolute;top:6px;right:6px;background:var(--bg);border:1px solid var(--border);
+  border-radius:5px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;
+  color:var(--muted2);cursor:pointer;font-size:13px;line-height:1;opacity:.6;transition:all .12s;
 }
 .dest-item:hover .di-del{opacity:1}
-.di-del:hover{color:var(--danger)}
+.di-del:hover{color:#fff;background:var(--danger);border-color:var(--danger);opacity:1}
 .di-bar-wrap{height:3px;background:var(--muted);border-radius:2px;overflow:hidden;margin-bottom:4px}
 .di-bar-fill{height:100%;border-radius:2px;transition:width .3s}
 .di-bar-fill.full{background:var(--ok)}.di-bar-fill.part{background:var(--warn)}.di-bar-fill.none{background:var(--muted)}
@@ -500,6 +501,7 @@ function renderMain(id){
           ${s.totalGuias} guías · ${s.totalBultos} bultos · ${s.pct}% verificado
         </div>
       </div>
+      <button class="btn danger h32" style="margin-left:auto" onclick="deleteViaje('${id}')">🗑 Eliminar viaje</button>
     </div>
     <div class="dtabs">
       <button class="dtab${tab==='scan'?' active':''}" onclick="switchDTab('${id}','scan')">📷 Escanear</button>
@@ -533,23 +535,25 @@ function renderScanTab(id,v,s){
       </div>
       <div class="sfb" id="sfb-${id}"><div class="fb-dot"></div><span id="sfbt-${id}"></span></div>
       <div class="hint">
-        Acepta número completo o últimos 6 dígitos.<br>
-        Si un código tiene múltiples bultos, escanéalo tantas veces como corresponda.
+        ${v.sistema.size===0
+          ? 'Modo escaneo libre: aún no hay data del sistema cargada. Escanea todos los documentos físicos primero, y al pegar la data en la pestaña "Data sistema" se hará la comparación automáticamente.'
+          : 'Acepta número completo o últimos 6 dígitos. Si un código tiene múltiples bultos, escanéalo tantas veces como corresponda.'}
       </div>
     </div>
 
     <div class="card">
       <div class="stat-row">
-        <div class="stat-box"><div class="stat-val c-cyan">${s.totalBultos}</div><div class="stat-lbl">Bultos sistema</div></div>
+        <div class="stat-box"><div class="stat-val c-cyan">${v.sistema.size>0?s.totalBultos:'—'}</div><div class="stat-lbl">Bultos sistema</div></div>
         <div class="stat-box"><div class="stat-val c-cyan">${s.totalScanned}</div><div class="stat-lbl">Escaneados</div></div>
-        <div class="stat-box"><div class="stat-val c-ok">${s.verifiedBultos}</div><div class="stat-lbl">Verificados</div></div>
-        <div class="stat-box"><div class="stat-val c-danger">${s.missingBultos}</div><div class="stat-lbl">Faltantes</div></div>
+        <div class="stat-box"><div class="stat-val c-ok">${v.sistema.size>0?s.verifiedBultos:'—'}</div><div class="stat-lbl">Verificados</div></div>
+        <div class="stat-box"><div class="stat-val c-danger">${v.sistema.size>0?s.missingBultos:'—'}</div><div class="stat-lbl">Faltantes</div></div>
       </div>
+      ${v.sistema.size>0?`
       <div class="prog-wrap">
         <div class="prog-lbl"><span>Progreso del viaje</span><span>${s.pct}%</span></div>
         <div class="prog-track"><div class="prog-fill" style="width:${s.pct}%"></div></div>
-      </div>
-      <div class="ctitle" style="margin-bottom:8px">Estado por guía</div>
+      </div>`:''}
+      <div class="ctitle" style="margin-bottom:8px">${v.sistema.size>0?'Estado por guía':'Guías escaneadas'}</div>
       <div class="chip-grid">${renderChips(v)}</div>
       <div class="btn-row">
         <button class="btn sec h32" onclick="exportScan('${id}')">⬇ Exportar</button>
@@ -557,16 +561,24 @@ function renderScanTab(id,v,s){
       </div>
     </div>
 
-    ${s.missingBultos>0||s.partialGuias>0 ? `
+    ${v.sistema.size===0 ? `
+    <div class="card">
+      <div class="ctitle"><span class="dot cyan"></span> Esperando data del sistema</div>
+      <p style="font-size:12px;color:var(--muted2);line-height:1.6">
+        Ya tienes <strong style="color:var(--text)">${s.totalScanned}</strong> bulto(s) escaneados.
+        Ve a la pestaña <strong style="color:var(--cyan)">"Data sistema"</strong> y pega la información
+        de este viaje para comparar automáticamente.
+      </p>
+    </div>` : (s.missingBultos>0||s.partialGuias>0 ? `
     <div class="card hl-danger">
       <div class="ctitle"><span class="dot danger"></span>
         Pendientes — ${s.missingBultos} bulto(s) sin verificar
       </div>
       <input class="search" placeholder="Buscar en faltantes..." oninput="filterMiss('${id}',this.value,'miss-${id}')">
       <div class="vlist" id="miss-${id}">${renderMissingList(v,'')}</div>
-    </div>` : `<div class="card"><div class="ctitle"><span class="dot ok"></span> ¡Todos los bultos verificados! 🎉</div></div>`}
+    </div>` : `<div class="card"><div class="ctitle"><span class="dot ok"></span> ¡Todos los bultos verificados! 🎉</div></div>`)}
 
-    ${s.extraScans>0 ? `
+    ${v.sistema.size>0 && s.extraScans>0 ? `
     <div class="card">
       <div class="ctitle"><span class="dot warn"></span> Escaneados no encontrados en sistema (${s.extraScans})</div>
       <div class="vlist">${renderExtraList(v)}</div>
@@ -576,7 +588,17 @@ function renderScanTab(id,v,s){
 
 function renderChips(v){
   if(v.sistema.size===0 && v.scanned.size===0)
-    return `<div class="empty" style="padding:16px"><div class="ei" style="font-size:20px">📄</div><p>Sin data cargada</p></div>`;
+    return `<div class="empty" style="padding:16px"><div class="ei" style="font-size:20px">📄</div><p>Aún no hay guías. Escanea el primer documento.</p></div>`;
+
+  // ── MODO LIBRE: sin sistema cargado, mostrar solo lo escaneado en neutro ──
+  if(v.sistema.size===0){
+    let html='';
+    v.scanned.forEach((cnt,cod)=>{
+      const badge=cnt>1?`<span class="chip-badge">×${cnt}</span>`:'';
+      html+=`<div class="chip c-none" title="${cod}">${cod}${badge}</div>`;
+    });
+    return html;
+  }
 
   let html='';
   // Sistema codes
@@ -662,7 +684,9 @@ function renderDataTab(id,v,s){
 // ── TAB: VERIFY ────────────────────────────────────────────────────────
 function renderVerifyTab(id,v,s){
   if(v.sistema.size===0&&v.scanned.size===0)
-    return `<div class="card"><div class="empty"><div class="ei">📋</div><p>Carga data del sistema y escanea guías para ver la verificación.</p></div></div>`;
+    return `<div class="card"><div class="empty"><div class="ei">📋</div><p>Escanea las guías y luego pega la data del sistema para ver la verificación.</p></div></div>`;
+  if(v.sistema.size===0)
+    return `<div class="card"><div class="empty"><div class="ei">📋</div><p>Tienes ${v.scanned.size} código(s) escaneados. Ve a la pestaña "Data sistema" y pega la información de este viaje para comparar.</p></div></div>`;
 
   const missingRows=[], okRows=[], partialRows=[];
   v.sistema.forEach((entry,cod)=>{
@@ -751,8 +775,30 @@ function addScan(id){
   const cleaned=normalize(raw);
   if(!cleaned){ showFb(id,'err','Número inválido — solo dígitos'); return; }
 
-  if(v.sistema.size===0){ showFb(id,'err','Carga la data del sistema primero'); return; }
+  const time=new Date().toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  const hasSistema=v.sistema.size>0;
 
+  // ── MODO LIBRE: aún no se ha cargado la data del sistema ──
+  // Se guarda el código tal cual fue escaneado (completo o 6 dígitos),
+  // sin intentar resolver contra el sistema todavía.
+  if(!hasSistema){
+    const prev=v.scanned.get(cleaned)||0;
+    v.scanned.set(cleaned,prev+1);
+    if(prev>0){
+      showFb(id,'dup',`⚠ ${cleaned} ya estaba escaneado (×${prev+1})`);
+      addLog(v,'warn',cleaned,`Repetido ×${prev+1}`,time);
+    } else {
+      showFb(id,'ok',`✓ Agregada: ${cleaned}`);
+      addLog(v,'ok',cleaned,'Escaneada',time);
+    }
+    save();
+    renderMain(id);
+    renderSidebar();
+    updateHeader();
+    return;
+  }
+
+  // ── MODO COMPARACIÓN: ya hay data del sistema cargada ──
   // Ambiguity check for suffix searches
   if(!v.sistema.has(cleaned)){
     const amb=ambiguousMatch(v,cleaned);
@@ -763,14 +809,12 @@ function addScan(id){
   }
 
   const cod=resolveCode(v,cleaned);
-  const time=new Date().toLocaleTimeString('es',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
   const inSis=v.sistema.has(cod);
 
   if(inSis){
     const entry=v.sistema.get(cod);
     const prev=v.scanned.get(cod)||0;
     if(prev>=entry.qty){
-      // Already fully scanned
       showFb(id,'dup',`⚠ ${cod.slice(-6)} ya completo (${entry.qty}/${entry.qty} bultos)`);
       addLog(v,'warn',cod,`Duplicado (ya completo)`,time);
     } else {
@@ -786,7 +830,6 @@ function addScan(id){
       }
     }
   } else {
-    // Not in sistema
     const prev=v.scanned.get(cod)||0;
     v.scanned.set(cod,prev+1);
     showFb(id,'err',`✗ ${cod.slice(-6)} no encontrado en sistema`);
@@ -837,7 +880,31 @@ function parseData(id){
       newMap.set(m,entry);
     });
   });
+
+  const wasEmpty = v.sistema.size===0;
   v.sistema=newMap;
+
+  // ── MIGRACIÓN: si se escaneó en modo libre (antes de cargar la data),
+  // los códigos guardados pueden ser de 6 dígitos o completos. Ahora que
+  // tenemos el maestro, resolvemos cada uno contra el código real del
+  // sistema para que la comparación quede correcta.
+  if(wasEmpty && v.scanned.size>0){
+    const oldScanned=v.scanned;
+    const migrated=new Map();
+    let unresolved=0;
+    oldScanned.forEach((cnt,raw)=>{
+      let resolvedCod=raw;
+      if(!newMap.has(raw)){
+        const matches=[...newMap.keys()].filter(c=>c.endsWith(raw));
+        if(matches.length===1) resolvedCod=matches[0];
+        else if(matches.length>1) unresolved++; // ambiguous, keep as-is (will show as "extra")
+      }
+      migrated.set(resolvedCod,(migrated.get(resolvedCod)||0)+cnt);
+    });
+    v.scanned=migrated;
+    if(unresolved>0) toast(`⚠ ${unresolved} código(s) escaneados son ambiguos, revisa manualmente`);
+  }
+
   save();
   const s=stats(v);
   const st=document.getElementById('ps-'+id);
